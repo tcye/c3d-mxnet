@@ -2,10 +2,10 @@
 import os
 import argparse
 import multiprocessing
-import logging
-import avi2jpg
+import utils
 
 num_processed = 0
+
 
 def cvt_dataset(src_dir, dest_dir):
     if not os.path.exists(src_dir):
@@ -24,24 +24,26 @@ def cvt_dataset(src_dir, dest_dir):
             name, ext = os.path.splitext(node)
             if ext != '.avi':
                 continue
-            frames = avi2jpg.extract_frames(os.path.join(src_dir, node))
-            avi2jpg.save_frames(os.path.join(dest_dir, name), frames)
+            frames = utils.extract_frames(os.path.join(src_dir, node))
+            utils.save_frames(os.path.join(dest_dir, name), frames)
 
             global num_processed
             num_processed += 1
             if num_processed % 30 == 0:
-                # logging.info('video(%s) has been processed', num_processed)
                 print('video(%s) has been processed' % num_processed)
+
 
 def process(src_dirs, dest_dirs):
     for src_dir, dest_dir in zip(src_dirs, dest_dirs):
         cvt_dataset(src_dir, dest_dir)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description='test model')
     parser.add_argument('src_dir', type=str, help='the dataset top dir')
     parser.add_argument('dest_dir', type=str, help='the destination dir')
     return parser.parse_args()
+
 
 if __name__ == '__main__':
     args = parse_args()

@@ -4,6 +4,7 @@ import cv2
 import os
 import logging
 
+
 def extract_frames_v1(path, num_to_extract=16):
     video = cv2.VideoCapture(path)
     frame_cnt = video.get(cv2.CAP_PROP_FRAME_COUNT)
@@ -19,6 +20,7 @@ def extract_frames_v1(path, num_to_extract=16):
             frames.append(frame)
     video.release()
     return frames
+
 
 def extract_frames_v2(path, num_to_extract=16):
     video = cv2.VideoCapture(path)
@@ -42,6 +44,7 @@ def extract_frames_v2(path, num_to_extract=16):
     return res
 
 extract_frames = extract_frames_v2
+
 
 def save_frames(savedir, frames):
     if not os.path.exists(savedir):
