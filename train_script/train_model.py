@@ -131,15 +131,13 @@ if __name__ == '__main__':
         model.init_params(arg_params=arg_params, aux_params=aux_params, allow_missing=False)
         logging.info(model.score(eval_data, eval_metrics))
     else:
-        data_iters = train_data_iter.get_data_iter(data_names=train_symbol.data_names,
-                                                   label_names=train_symbol.label_names,
-                                                   kv=train_params['kvstore'])
+        data_iters = train_data_iter.get_data_iter()
         batch_end_callbacks = [mx.callback.Speedometer(train_data_iter.batch_size, 50)]
         model.fit(train_data=data_iters[0],
                   eval_data=None if len(data_iters) == 1 else data_iters[1],
                   eval_metric=eval_metrics,
                   batch_end_callback=batch_end_callbacks,
-                  epoch_end_callback=checkpoint,
+                  # epoch_end_callback=checkpoint,
                   arg_params=arg_params,
                   aux_params=aux_params,
                   **train_params)

@@ -1,72 +1,128 @@
+import os
+import glob
+import random
+import cv2
+import numpy as np
 import mxnet as mx
 
-input_size = 224
-batch_size = 64
+
+batch_size = 16
 
 
-def get_common_input_params():
-    param = dict()
-    param['mean_r'] = 123
-    param['mean_g'] = 117
-    param['mean_b'] = 104
-    param['scale'] = 1
-    param['data_shape'] = (3, input_size, input_size)
-    return param
+class UCFIter(mx.io.DataIter):
+    def __init__(self, ucf_dir, lst_file, batch_size, data_shape):
+        super(UCFIter, self).__init__(batch_size)
+        self.ucf_dir = ucf_dir
+        self.lst_file = lst_file
+        self.data_shape = data_shape
+
+        self.name2label = self.read_label_map()
+        self.files, self.labels = self.read_lst_data()
+        self.count = len(self.files) // batch_size
+
+        self.provide_data = [('data', (batch_size, ) + data_shape)]
+        self.provide_label = [('label', (batch_size, ))]
 
 
-def get_test_data_iter(data_names, label_names, batch_size=batch_size, num_parts=1, part_index=0):
-    input_params = get_common_input_params()
-    return mx.io.ImageRecordIter(
-        path_imgrec='/data/violation/im_res/val.rec',
-        resize_mode='square',
-        resize=input_size,
-        rand_crop=False,
-        rand_mirror=False,
-        preprocess_threads=8,
-        batch_size=batch_size,
-        num_parts=num_parts,
-        part_index=part_index,
-        data_names=data_names,
-        label_names=label_names,
-        **input_params)
+    def read_label_map(self):
+        name2label = dict()
+        dirname = os.path.dirname(self.lst_file)
+        label_map_file = os.path.join(dirname, 'classInd.txt')
+        with open(label_map_file, 'r') as f:
+            total = f.readlines()
+        for line in total:
+            tmp, _ = line.split('\n')
+            label, name = tmp.split(' ', 1)
+            name2label[name] = int(label)
+        return name2label
+
+    def decide_label_by_name(self, filename):
+        name = filename.split('/')[0]
+        return self.name2label.get(name, 0)
+
+    def read_lst_data(self):
+        data_1 = []
+        data_2 = []
+        with open(self.lst_file, 'r') as f:
+            total = f.readlines()
+        random.shuffle(total)
+        for eachLine in total:
+            tmp = eachLine.split('\n')
+            tmp = tmp[0].split(' ', 1)
+
+            if len(tmp) == 2:
+                tmp_1, tmp_2 = tmp
+            else:  # len(tmp) == 1
+                tmp_1 = tmp[0]
+                tmp_2 = self.decide_label_by_name(tmp_1)
+
+            data_1.append(tmp_1)
+            data_2.append(int(tmp_2))
+        return data_1, data_2
+
+    def read_video_frames(self, video_file):
+        filename, _ = os.path.splitext(video_file)
+        imgdir = os.path.join(self.ucf_dir, filename)
+        imgnames = os.path.join(imgdir, '*.jpg')
+        pics = sorted(glob.glob(imgnames))
+
+        r_1 = []
+        g_1 = []
+        b_1 = []
+        mat = []
+
+        for pic in pics:
+            img = cv2.imread(pic, cv2.IMREAD_COLOR)
+            b, g, r = cv2.split(img)
+            r = cv2.resize(r, (self.data_shape[3], self.data_shape[2]))
+            g = cv2.resize(g, (self.data_shape[3], self.data_shape[2]))
+            b = cv2.resize(b, (self.data_shape[3], self.data_shape[2]))
+            r = np.multiply(r, 1/255.0) - 0.5
+            g = np.multiply(g, 1/255.0) - 0.5
+            b = np.multiply(b, 1/255.0) - 0.5
+            r_1.append(r)
+            g_1.append(g)
+            b_1.append(b)
+
+        mat.append(r_1)
+        mat.append(g_1)
+        mat.append(b_1)
+        return mat
+
+    def __iter__(self):
+        for k in range(self.count):
+            data = []
+            label = []
+            for i in range(self.batch_size):
+                idx = k * self.batch_size + i
+                pic = self.read_video_frames(self.files[idx])
+                data.append(pic)
+                label.append(int(self.labels[idx]))
+
+            data_all = [mx.nd.array(data)]
+            label_all = [mx.nd.array(label)]
+            data_batch = mx.io.DataBatch(data_all, label_all,
+                                         provide_data=self.provide_data, provide_label=self.provide_label)
+            yield data_batch
 
 
-def get_train_data_iter(data_names, label_names, batch_size=batch_size, num_parts=1, part_index=0):
-    input_params = get_common_input_params()
-    return mx.io.ImageRecordIter(
-        path_imgrec='/data/violation/im_res/train.rec',
-        resize_mode='random',
-        resize_mode_ratio=(0, 1, 1),  # short_base, long_base, square
-        resize=256,
-        min_random_scale=0.875,  # 224 / 256
-        max_random_scale=1,
-        max_rotate_angle=20,
-        batch_size=batch_size,
-        rand_crop=True,
-        rand_mirror=True,
-        aug_seq='aug_default,blur',
-        blur_ratio=0.5,
-        blur_mode='random',
-        blur_mode_ratio=(1, 1),  # gaussian, motion
-        # gaussian blur ralated
-        min_gaussian_blur_kernel_size=3,
-        max_gaussian_blur_kernel_size=3,
-        min_gaussian_blur_sigma=1.5,
-        max_gaussian_blur_sigma=1.5,
-        # motion blur related
-        min_motion_blur_kernel_size=5,
-        max_motion_blur_kernel_size=10,
-        max_motion_blur_rotate_angle=5,
-        # motion_blur_angle_list = (0, 45, 90, 135),   # without this, will random from [0, 180]
-        preprocess_threads=24,
-        num_parts=num_parts,
-        part_index=part_index,
-        shuffle_chunk_size=32,
-        data_names=data_names,
-        label_names=label_names,
-        **input_params)
+def get_test_data_iter():
+    return UCFIter(
+        '/home/yetiancai/data/UCF-101-IMG2/',
+        '/home/yetiancai/data/UCF-101-LST/trainlist01.txt',
+        batch_size,
+        (3, 16, 122, 122),
+    )
 
 
-def get_data_iter(data_names, label_names, kv):
-    return get_train_data_iter(data_names, label_names, batch_size, kv.num_workers, kv.rank), \
-           get_test_data_iter(data_names, label_names, batch_size, kv.num_workers, kv.rank)
+def get_train_data_iter():
+    return UCFIter(
+        '/home/yetiancai/data/UCF-101-IMG2/',
+        '/home/yetiancai/data/UCF-101-LST/testlist01.txt',
+        batch_size,
+        (3, 16, 122, 122),
+    )
+
+
+def get_data_iter():
+    return get_train_data_iter(), get_test_data_iter()
