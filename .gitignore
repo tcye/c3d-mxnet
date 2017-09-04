@@ -1,1 +1,5 @@
 __pycache__
+/.idea
+/train_script/c3d/symbol_test.json
+/train_script/plot.gv
+/train_script/plot.gv.pdf
